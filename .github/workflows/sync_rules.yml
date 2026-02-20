@@ -1,7 +1,7 @@
 name: Sync Sukka Rules (YAML & MRS)
 on:
   schedule:
-    - cron: '0 3 * * *' # 每天凌晨3点执行
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,45 +13,35 @@ jobs:
 
       - name: Install Mihomo & Tools
         run: |
-          wget https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.tar.gz
-          tar -xzf mihomo-linux-amd64-v1.18.9.tar.gz
-          mv mihomo-linux-amd64 mihomo && chmod +x mihomo
+          # 自动获取最新版 Mihomo 并下载
+          curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
+          | jq -r '.assets[] | select(.name | contains("linux-amd64")) | select(.name | contains("compatible") | not) | .browser_download_url' \
+          | xargs wget -O mihomo.gz
+          gunzip -S .gz mihomo.gz || mv mihomo.gz mihomo
+          chmod +x mihomo
           sudo apt-get install -y jq
 
       - name: Process Rules
         run: |
-          # 创建目录结构
           mkdir -p rules/yaml/non_ip rules/yaml/ip
           mkdir -p rules/mrs/non_ip rules/mrs/ip
           
-          # --- 处理 Domain 类规则 (non_ip) ---
           echo "Processing non_ip rules..."
           curl -s https://api.github.com/repos/SukkaW/Surge/contents/Clash/non_ip | jq -r '.[].name' | grep '.txt' > non_ip_list.txt
-          
           while read file; do
             name=${file%.txt}
             curl -sL -o temp.txt "https://ruleset.skk.moe/Clash/non_ip/$file"
-            
-            # 转换为 YAML (behavior: domain)
             ./mihomo convert ruleset domain temp.txt "rules/yaml/non_ip/${name}.yaml"
-            # 转换为 MRS (behavior: domain)
             ./mihomo convert ruleset domain temp.txt "rules/mrs/non_ip/${name}.mrs"
-            echo "Done non_ip: $name"
           done < non_ip_list.txt
 
-          # --- 处理 IP 类规则 (ip) ---
           echo "Processing ip rules..."
           curl -s https://api.github.com/repos/SukkaW/Surge/contents/Clash/ip | jq -r '.[].name' | grep '.txt' > ip_list.txt
-          
           while read file; do
             name=${file%.txt}
             curl -sL -o temp.txt "https://ruleset.skk.moe/Clash/ip/$file"
-            
-            # 转换为 YAML (behavior: ipcidr)
             ./mihomo convert ruleset ipcidr temp.txt "rules/yaml/ip/${name}.yaml"
-            # 转换为 MRS (behavior: ipcidr)
             ./mihomo convert ruleset ipcidr temp.txt "rules/mrs/ip/${name}.mrs"
-            echo "Done ip: $name"
           done < ip_list.txt
 
       - name: Commit and Push
