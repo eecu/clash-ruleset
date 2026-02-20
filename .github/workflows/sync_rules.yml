@@ -1,8 +1,8 @@
 name: Sync Sukka Rules (YAML & MRS)
 on:
   schedule:
-    - cron: '0 3 * * *'
-  workflow_dispatch:
+    - cron: '0 3 * * *' # 每天凌晨3点自动运行
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   build:
@@ -13,35 +13,44 @@ jobs:
 
       - name: Install Mihomo & Tools
         run: |
-          # 自动获取最新版 Mihomo 下载链接
+          # 精准获取最新版 Mihomo Linux-amd64 二进制压缩包链接
           URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
-          | jq -r '.assets[] | select(.name | contains("linux-amd64")) | select(.name | contains("compatible") | not) | .browser_download_url')
+          | jq -r '.assets[] | select(.name | test("linux-amd64-v1.*\\.gz$")) | .browser_download_url' | head -n 1)
           
-          # 下载并解压
-          wget -O mihomo.gz "$URL"
+          echo "Downloading from: $URL"
+          wget -q -O mihomo.gz "$URL"
           gunzip -c mihomo.gz > mihomo
           chmod +x mihomo
           sudo apt-get install -y jq
 
       - name: Process Rules
         run: |
+          # 创建清晰的目录结构
           mkdir -p rules/yaml/non_ip rules/yaml/ip
           mkdir -p rules/mrs/non_ip rules/mrs/ip
           
+          # --- 处理 Domain 类规则 (non_ip) ---
           echo "Processing non_ip rules..."
           curl -s https://api.github.com/repos/SukkaW/Surge/contents/Clash/non_ip | jq -r '.[].name' | grep '.txt' > non_ip_list.txt
+          
           while read file; do
             name=${file%.txt}
+            echo "Converting non_ip: $name"
             curl -sL -o temp.txt "https://ruleset.skk.moe/Clash/non_ip/$file"
+            # 同时转换为 YAML 和 MRS 格式
             ./mihomo convert ruleset domain temp.txt "rules/yaml/non_ip/${name}.yaml"
             ./mihomo convert ruleset domain temp.txt "rules/mrs/non_ip/${name}.mrs"
           done < non_ip_list.txt
 
+          # --- 处理 IP 类规则 (ip) ---
           echo "Processing ip rules..."
           curl -s https://api.github.com/repos/SukkaW/Surge/contents/Clash/ip | jq -r '.[].name' | grep '.txt' > ip_list.txt
+          
           while read file; do
             name=${file%.txt}
+            echo "Converting ip: $name"
             curl -sL -o temp.txt "https://ruleset.skk.moe/Clash/ip/$file"
+            # 同时转换为 YAML 和 MRS 格式
             ./mihomo convert ruleset ipcidr temp.txt "rules/yaml/ip/${name}.yaml"
             ./mihomo convert ruleset ipcidr temp.txt "rules/mrs/ip/${name}.mrs"
           done < ip_list.txt
@@ -51,5 +60,6 @@ jobs:
           git config --local user.email "actions@github.com"
           git config --local user.name "Rule-Sync-Bot"
           git add rules/
+          # 如果没有变化则不提交，避免报错
           git commit -m "Sync Sukka Rules (YAML & MRS) - $(date +%Y-%m-%d)" || exit 0
           git push
