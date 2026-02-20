@@ -33,6 +33,8 @@ jobs:
 
       - name: Download and Convert Rules
         run: |
+          set +e
+          
           BASE_URL="https://ruleset.skk.moe/Clash"
           
           rm -rf domainset non_ip ip
@@ -41,6 +43,24 @@ jobs:
           echo "📥 Fetching rule list..."
           curl -s https://ruleset.skk.moe/ | grep -oP 'Clash/(domainset|non_ip|ip)/[^"]+\.txt' | sort -u > /tmp/rules_list.txt
           
+          convert_to_mrs() {
+            local yaml_file=$1
+            local mrs_file=$2
+            local behavior=$3
+            local max_retries=3
+            local retry=0
+            
+            while [ $retry -lt $max_retries ]; do
+              if timeout 300 mihomo convert-ruleset "$behavior" yaml "$yaml_file" "$mrs_file" 2>/dev/null; then
+                return 0
+              fi
+              ((retry++))
+              echo "    Retry $retry/$max_retries..."
+              sleep 2
+            done
+            return 1
+          }
+          
           echo "📥 Downloading and converting rules..."
           while read -r rule; do
             url="${BASE_URL%/Clash}/${rule}"
@@ -48,47 +68,48 @@ jobs:
             filename=$(basename "$rule")
             name="${filename%.txt}"
             
-            if curl -sf "$url" -o "/tmp/temp.txt"; then
-              
-              # 提取有效规则（去掉注释和空行）
-              grep -v '^#' "/tmp/temp.txt" | grep -v '^$' | grep -v '^[[:space:]]*$' > /tmp/clean.txt
-              
-              # 检查是否有有效规则
-              rule_count=$(wc -l < /tmp/clean.txt)
-              
-              if [ "$rule_count" -gt 0 ]; then
-                echo "  ✅ ${category}/${name} (${rule_count} rules)"
-                
-                # 生成 YAML
-                echo "payload:" > "${category}/${name}.yaml"
-                sed 's/^/  - /' /tmp/clean.txt >> "${category}/${name}.yaml"
-                
-                # 确定 behavior
-                if [ "$category" = "ip" ]; then
-                  behavior="ipcidr"
-                else
-                  behavior="domain"
-                fi
-                
-                # 编译 MRS
-                if ! mihomo convert-ruleset "$behavior" yaml "${category}/${name}.yaml" "${category}/${name}.mrs" 2>/dev/null; then
-                  echo "  ⚠️  ${category}/${name} MRS conversion failed, skipping MRS"
-                  rm -f "${category}/${name}.mrs"
-                fi
-              else
-                echo "  ⏭️  ${category}/${name} (empty, skipped)"
-              fi
-            else
+            # 下载
+            if ! curl -sf --retry 3 "$url" -o "/tmp/temp.txt"; then
               echo "  ❌ ${category}/${name} (download failed)"
+              continue
             fi
+            
+            # 清理规则
+            grep -v '^#' "/tmp/temp.txt" | grep -v '^$' | grep -v '^[[:space:]]*$' > /tmp/clean.txt
+            rule_count=$(wc -l < /tmp/clean.txt)
+            
+            if [ "$rule_count" -eq 0 ]; then
+              echo "  ⏭️  ${category}/${name} (empty)"
+              continue
+            fi
+            
+            # 生成 YAML
+            echo "payload:" > "${category}/${name}.yaml"
+            sed 's/^/  - /' /tmp/clean.txt >> "${category}/${name}.yaml"
+            
+            # 确定 behavior
+            if [ "$category" = "ip" ]; then
+              behavior="ipcidr"
+            else
+              behavior="domain"
+            fi
+            
+            # 编译 MRS（带重试和超时）
+            echo -n "  Processing ${category}/${name} (${rule_count} rules)... "
+            if convert_to_mrs "${category}/${name}.yaml" "${category}/${name}.mrs" "$behavior"; then
+              echo "✅"
+            else
+              echo "⚠️ MRS failed"
+            fi
+            
           done < /tmp/rules_list.txt
           
           echo ""
           echo "✅ Done!"
-          echo "📊 Statistics:"
-          echo "  domainset: $(ls domainset/*.yaml 2>/dev/null | wc -l) rules"
-          echo "  non_ip: $(ls non_ip/*.yaml 2>/dev/null | wc -l) rules"
-          echo "  ip: $(ls ip/*.yaml 2>/dev/null | wc -l) rules"
+          echo "📊 Files generated:"
+          echo "  domainset: $(ls domainset/*.yaml 2>/dev/null | wc -l) yaml, $(ls domainset/*.mrs 2>/dev/null | wc -l) mrs"
+          echo "  non_ip: $(ls non_ip/*.yaml 2>/dev/null | wc -l) yaml, $(ls non_ip/*.mrs 2>/dev/null | wc -l) mrs"
+          echo "  ip: $(ls ip/*.yaml 2>/dev/null | wc -l) yaml, $(ls ip/*.mrs 2>/dev/null | wc -l) mrs"
 
       - name: Commit and Push
         run: |
