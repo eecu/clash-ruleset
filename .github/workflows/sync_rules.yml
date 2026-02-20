@@ -13,11 +13,13 @@ jobs:
 
       - name: Install Mihomo & Tools
         run: |
-          # 自动获取最新版 Mihomo 并下载
-          curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
-          | jq -r '.assets[] | select(.name | contains("linux-amd64")) | select(.name | contains("compatible") | not) | .browser_download_url' \
-          | xargs wget -O mihomo.gz
-          gunzip -S .gz mihomo.gz || mv mihomo.gz mihomo
+          # 自动获取最新版 Mihomo 下载链接
+          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
+          | jq -r '.assets[] | select(.name | contains("linux-amd64")) | select(.name | contains("compatible") | not) | .browser_download_url')
+          
+          # 下载并解压
+          wget -O mihomo.gz "$URL"
+          gunzip -c mihomo.gz > mihomo
           chmod +x mihomo
           sudo apt-get install -y jq
 
