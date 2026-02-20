@@ -25,41 +25,41 @@ jobs:
           BASE_URL="https://ruleset.skk.moe/Clash"
           
           # 清理旧文件
-          rm -rf domainset non_ip ip yaml mrs
-          mkdir -p domainset non_ip ip yaml/domainset yaml/non_ip yaml/ip mrs/domainset mrs/non_ip mrs/ip
+          rm -rf domainset non_ip ip
+          mkdir -p domainset non_ip ip
           
           # 获取规则列表
           echo "📥 Fetching rule list..."
-          curl -s https://ruleset.skk.moe/ | grep -oP 'Clash/(domainset|non_ip|ip)/[^"]+\.txt' | sort -u > rules_list.txt
+          curl -s https://ruleset.skk.moe/ | grep -oP 'Clash/(domainset|non_ip|ip)/[^"]+\.txt' | sort -u > /tmp/rules_list.txt
           
-          # 下载所有规则
-          echo "📥 Downloading rules..."
+          # 下载并转换
+          echo "📥 Downloading and converting rules..."
           while read -r rule; do
             url="${BASE_URL%/Clash}/${rule}"
             category=$(echo "$rule" | cut -d'/' -f2)
             filename=$(basename "$rule")
             name="${filename%.txt}"
             
-            echo "  Downloading: $category/$name"
-            
-            # 下载原始文件
-            if curl -sf "$url" -o "${category}/${filename}"; then
-              # 转换为 YAML
-              echo "payload:" > "yaml/${category}/${name}.yaml"
-              grep -v '^#' "${category}/${filename}" | grep -v '^$' | sed 's/^/  - /' >> "yaml/${category}/${name}.yaml"
+            if curl -sf "$url" -o "/tmp/temp.txt"; then
+              echo "  ✅ ${category}/${name}"
               
-              # 复制为 MRS
-              cp "yaml/${category}/${name}.yaml" "mrs/${category}/${name}.mrs"
+              # 生成 YAML
+              echo "payload:" > "${category}/${name}.yaml"
+              grep -v '^#' "/tmp/temp.txt" | grep -v '^$' | sed 's/^/  - /' >> "${category}/${name}.yaml"
+              
+              # 生成 MRS（同内容）
+              cp "${category}/${name}.yaml" "${category}/${name}.mrs"
+            else
+              echo "  ❌ ${category}/${name}"
             fi
-          done < rules_list.txt
+          done < /tmp/rules_list.txt
           
-          rm -f rules_list.txt
-          
+          echo ""
           echo "✅ Done!"
           echo "📊 Statistics:"
-          echo "  domainset: $(ls domainset/*.txt 2>/dev/null | wc -l) files"
-          echo "  non_ip: $(ls non_ip/*.txt 2>/dev/null | wc -l) files"
-          echo "  ip: $(ls ip/*.txt 2>/dev/null | wc -l) files"
+          echo "  domainset: $(ls domainset/*.yaml 2>/dev/null | wc -l) rules"
+          echo "  non_ip: $(ls non_ip/*.yaml 2>/dev/null | wc -l) rules"
+          echo "  ip: $(ls ip/*.yaml 2>/dev/null | wc -l) rules"
 
       - name: Commit and Push
         run: |
