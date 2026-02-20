@@ -1,65 +1,94 @@
-name: Sync Sukka Rules (YAML & MRS)
+name: Sync Sukka Clash Rules
+
 on:
+  push:
   schedule:
-    - cron: '0 3 * * *' # 每天凌晨3点自动运行
-  workflow_dispatch: # 允许手动触发
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  MIHOMO_VERSION: 1.19.0
 
 jobs:
-  build:
+  sync:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Mihomo & Tools
+      - name: Setup Git
         run: |
-          # 精准获取最新版 Mihomo Linux-amd64 二进制压缩包链接
-          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
-          | jq -r '.assets[] | select(.name | test("linux-amd64-v1.*\\.gz$")) | .browser_download_url' | head -n 1)
-          
-          echo "Downloading from: $URL"
-          wget -q -O mihomo.gz "$URL"
-          gunzip -c mihomo.gz > mihomo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install mihomo
+        run: |
+          curl -Lo mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v${MIHOMO_VERSION}/mihomo-linux-amd64-v${MIHOMO_VERSION}.gz
+          gzip -d mihomo.gz
           chmod +x mihomo
-          sudo apt-get install -y jq
+          sudo mv mihomo /usr/local/bin/
+          mihomo -v
 
-      - name: Process Rules
+      - name: Fetch Clash Rules
         run: |
-          # 创建清晰的目录结构
-          mkdir -p rules/yaml/non_ip rules/yaml/ip
-          mkdir -p rules/mrs/non_ip rules/mrs/ip
+          # 添加 Sukka 仓库
+          git remote add sukka https://github.com/SukkaW/Surge.git || true
+          git fetch sukka
           
-          # --- 处理 Domain 类规则 (non_ip) ---
-          echo "Processing non_ip rules..."
-          curl -s https://api.github.com/repos/SukkaW/Surge/contents/Clash/non_ip | jq -r '.[].name' | grep '.txt' > non_ip_list.txt
+          # 获取 Clash 规则
+          rm -rf domainset non_ip ip
+          git checkout sukka/master -- Build/Clash
+          mv Build/Clash/* ./
+          rm -rf Build
           
-          while read file; do
-            name=${file%.txt}
-            echo "Converting non_ip: $name"
-            curl -sL -o temp.txt "https://ruleset.skk.moe/Clash/non_ip/$file"
-            # 同时转换为 YAML 和 MRS 格式
-            ./mihomo convert ruleset domain temp.txt "rules/yaml/non_ip/${name}.yaml"
-            ./mihomo convert ruleset domain temp.txt "rules/mrs/non_ip/${name}.mrs"
-          done < non_ip_list.txt
+          # 显示获取的文件
+          echo "📦 Downloaded rules:"
+          find . -name "*.txt" | head -20
 
-          # --- 处理 IP 类规则 (ip) ---
-          echo "Processing ip rules..."
-          curl -s https://api.github.com/repos/SukkaW/Surge/contents/Clash/ip | jq -r '.[].name' | grep '.txt' > ip_list.txt
+      - name: Convert to YAML
+        run: |
+          mkdir -p yaml mrs
           
-          while read file; do
-            name=${file%.txt}
-            echo "Converting ip: $name"
-            curl -sL -o temp.txt "https://ruleset.skk.moe/Clash/ip/$file"
-            # 同时转换为 YAML 和 MRS 格式
-            ./mihomo convert ruleset ipcidr temp.txt "rules/yaml/ip/${name}.yaml"
-            ./mihomo convert ruleset ipcidr temp.txt "rules/mrs/ip/${name}.mrs"
-          done < ip_list.txt
+          for category in domainset non_ip ip; do
+            mkdir -p yaml/${category} mrs/${category}
+            
+            if [ -d "${category}" ]; then
+              for txt_file in ${category}/*.txt; do
+                if [ -f "$txt_file" ]; then
+                  filename=$(basename "$txt_file" .txt)
+                  echo "Converting: ${category}/${filename}"
+                  
+                  # 转换为 YAML
+                  echo "payload:" > "yaml/${category}/${filename}.yaml"
+                  grep -v '^#' "$txt_file" | grep -v '^$' | sed 's/^/  - /' >> "yaml/${category}/${filename}.yaml"
+                  
+                  # 复制为 MRS（mihomo 兼容格式）
+                  cp "yaml/${category}/${filename}.yaml" "mrs/${category}/${filename}.mrs"
+                fi
+              done
+            fi
+          done
+
+      - name: Generate Index
+        run: |
+          echo "{\"updated\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"rules\":[" > index.json
+          first=true
+          for f in yaml/*/*.yaml; do
+            if [ "$first" = true ]; then first=false; else echo "," >> index.json; fi
+            echo "\"$f\"" >> index.json
+          done
+          echo "]}" >> index.json
 
       - name: Commit and Push
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "Rule-Sync-Bot"
-          git add rules/
-          # 如果没有变化则不提交，避免报错
-          git commit -m "Sync Sukka Rules (YAML & MRS) - $(date +%Y-%m-%d)" || exit 0
-          git push
+          git add .
+          if git diff-index --quiet HEAD --; then
+            echo "No changes"
+          else
+            git commit -m "Sync: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
