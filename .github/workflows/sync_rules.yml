@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  MIHOMO_VERSION: 1.19.0
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -20,11 +23,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Install mihomo
+        run: |
+          curl -Lo mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v${MIHOMO_VERSION}/mihomo-linux-amd64-v${MIHOMO_VERSION}.gz
+          gzip -d mihomo.gz
+          chmod +x mihomo
+          sudo mv mihomo /usr/local/bin/
+          mihomo -v
+
       - name: Download and Convert Rules
         run: |
           BASE_URL="https://ruleset.skk.moe/Clash"
           
-          # 清理旧文件
           rm -rf domainset non_ip ip
           mkdir -p domainset non_ip ip
           
@@ -47,8 +57,16 @@ jobs:
               echo "payload:" > "${category}/${name}.yaml"
               grep -v '^#' "/tmp/temp.txt" | grep -v '^$' | sed 's/^/  - /' >> "${category}/${name}.yaml"
               
-              # 生成 MRS（同内容）
-              cp "${category}/${name}.yaml" "${category}/${name}.mrs"
+              # 确定 behavior
+              if [ "$category" = "ip" ]; then
+                behavior="ipcidr"
+              else
+                behavior="domain"
+              fi
+              
+              # 使用 mihomo 编译 MRS
+              mihomo convert-ruleset "$behavior" yaml "${category}/${name}.yaml" "${category}/${name}.mrs"
+              
             else
               echo "  ❌ ${category}/${name}"
             fi
@@ -56,10 +74,6 @@ jobs:
           
           echo ""
           echo "✅ Done!"
-          echo "📊 Statistics:"
-          echo "  domainset: $(ls domainset/*.yaml 2>/dev/null | wc -l) rules"
-          echo "  non_ip: $(ls non_ip/*.yaml 2>/dev/null | wc -l) rules"
-          echo "  ip: $(ls ip/*.yaml 2>/dev/null | wc -l) rules"
 
       - name: Commit and Push
         run: |
