@@ -509,6 +509,7 @@ payload:
   - ookla.ukcell.net
   - speedtest.swnnms.net
   - speed.sparcs.net
+  - speedtest3a.socket.net
   - speedtest1a.socket.net
   - speedtest.sentco.net
   - speedtestnet.relaix.net
@@ -2578,6 +2579,7 @@ payload:
   - speed.connextelecom.com.br
   - speedtest.ceanettelecom.com.br
   - ookla.araujotelecom.com.br
+  - speedtest.amazonasfiber.com.br
   - speedtest.uptelecom-ro.com.br
   - speed.upnetcaucaia.com.br
   - stest.ultraconnect.com.br
