@@ -922,6 +922,7 @@ payload:
   - speedtestmiami.telecablecr.com
   - speedtest.telecablecr.com
   - ookla1.talkiefiber.com
+  - speedtest.softwareeni.com
   - sp1.snsinternet.com
   - speedtest-sd-da1.scalematrix.com
   - speedtest.samparkinfo.com
@@ -2222,6 +2223,7 @@ payload:
   - testvelocidadbil.orange.es
   - testvelocidadbar.orange.es
   - testdevelocidad.imatel.es
+  - speedtest3.avatel.es
   - speedtest2.avatel.es
   - speedtest1.avatel.es
   - sp1.alcort.es
@@ -2269,6 +2271,7 @@ payload:
   - nico2004uk.de
   - speedtest.netcomnetz.de
   - speedtest1.binz-kabel.de
+  - test.royalgirl.de
   - speedtest.netzwerge.de
   - ookla.kues-data.de
   - speedtest.intersaar.de
