@@ -17,6 +17,6 @@ payload:
   - +.beacon.qq.com
   - +.trace.qq.com
   - stat.youpin.mi.com
-  - +.f-log-extension.grammarly.io
   - +.jpush.io
   - +.jpush.cn
+  - DOMAIN-WILDCARD,f-log*.grammarly.io
