@@ -43,6 +43,8 @@ payload:
   - stun.smartgslb.com
   - +.notifysrv.com
   - +.newzgames.com
+  - ttnet-doh.larksuite.com
+  - ttnet-dig.larksuite.com
   - +.brightvpn.com
   - httpdns.bilivideo.com
   - +.amplitude.com
@@ -177,6 +179,7 @@ payload:
   - +fb-business-appeal
   - +cp-home-pl-
   - +tlauncher
+  - +packetsdk
   - +this_rule_set_is_made_by_sukkaw
   - +umeng
   - +adsby
